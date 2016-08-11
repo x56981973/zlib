@@ -11,6 +11,8 @@ void printUsage()
 
 int main(int argc, char **argv)
 {
+
+    /*
     char *in; //source file name
     char *out; //out file name
     unsigned char *key; //AES Key
@@ -73,6 +75,48 @@ int main(int argc, char **argv)
 
     fclose(input);
     fclose(output);
+
+    return 0;
+    */
+
+    unsigned char key[] = "thiskeyisverybad";
+
+    FILE *src;
+    src = fopen("c","rb");
+    if(src == NULL){
+        printf("Unable to open file.\n");
+        return -1;
+    }
+    FILE *dst;
+    dst = fopen("c.out","wb");
+    if(dst == NULL){
+        printf("Unable to open file.\n");
+        return -1;
+    }
+
+    CompressAndEncrypt(src,dst,key);
+
+    fclose(src);
+    fclose(dst);
+
+    FILE *src1;
+    src1 = fopen("c.out","rb");
+    if(src1 == NULL){
+        printf("Unable to open file.\n");
+        return -1;
+    }
+
+    FILE *dst1;
+    dst1 = fopen("c.out.out","wb");
+    if(dst1 == NULL){
+        printf("Unable to open file.\n");
+        return -1;
+    }
+
+    UncompressAndDecrypt(src1,dst1,key);
+
+    fclose(src1);
+    fclose(dst1);
 
     return 0;
 }
