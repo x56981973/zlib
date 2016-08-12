@@ -82,13 +82,13 @@ int main(int argc, char **argv)
     unsigned char key[] = "thiskeyisverybad";
 
     FILE *src;
-    src = fopen("c","rb");
+    src = fopen("a","rb");
     if(src == NULL){
         printf("Unable to open file.\n");
         return -1;
     }
     FILE *dst;
-    dst = fopen("c.out","wb");
+    dst = fopen("a.out","wb");
     if(dst == NULL){
         printf("Unable to open file.\n");
         return -1;
@@ -100,14 +100,14 @@ int main(int argc, char **argv)
     fclose(dst);
 
     FILE *src1;
-    src1 = fopen("c.out","rb");
+    src1 = fopen("a.out","rb");
     if(src1 == NULL){
         printf("Unable to open file.\n");
         return -1;
     }
 
     FILE *dst1;
-    dst1 = fopen("c.out.out","wb");
+    dst1 = fopen("a.out.out","wb");
     if(dst1 == NULL){
         printf("Unable to open file.\n");
         return -1;

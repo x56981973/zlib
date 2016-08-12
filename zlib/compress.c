@@ -5,8 +5,6 @@
 #include "compress.h"
 #include "encrypt.h"
 
-#define CHUNK 16384
-
 int getBlockNum(int size)
 {
     if( size % AES_BLOCK_SIZE )
@@ -38,7 +36,7 @@ int CompressAndEncrypt(FILE *src, FILE *dst, unsigned char *key)
         return ret;
 
     /* compress until end of file */
-    do
+    while (1)
     {
         strm.avail_in = fread(in, 1, CHUNK, src);
         if (ferror(src))
@@ -49,14 +47,14 @@ int CompressAndEncrypt(FILE *src, FILE *dst, unsigned char *key)
         flush = feof(src) ? Z_FINISH : Z_NO_FLUSH;
         strm.next_in = in;
 
-        do
+        while (1)
         {
             strm.avail_out = CHUNK;
             strm.next_out = out;
             ret = deflate(&strm, flush);
             have = CHUNK - strm.avail_out;
 
-            if( have != 0 )
+            if(have != 0)
             {
                 //Encrypt start
                 blockNum = getBlockNum(have);
@@ -73,9 +71,14 @@ int CompressAndEncrypt(FILE *src, FILE *dst, unsigned char *key)
                     return Z_ERRNO;
                 }
             }
-        } while (strm.avail_out == 0);
 
-    } while (flush != Z_FINISH);
+            if(strm.avail_out != 0)
+                break;
+        }
+
+        if(flush == Z_FINISH)
+            break;
+    }
 
     (void)deflateEnd(&strm);
     return Z_OK;
@@ -104,15 +107,16 @@ int UncompressAndDecrypt(FILE *src, FILE *dst, unsigned char *key)
     if (ret != Z_OK)
         return ret;
 
-    do {
+    while (1)
+    {
         //Read Flag
-        if(fread(cipherFlag, 1, AES_BLOCK_SIZE, src) != AES_BLOCK_SIZE){
+        if(fread(cipherFlag, 1, AES_BLOCK_SIZE, src) != AES_BLOCK_SIZE)
             break;
-        }
 
         //Decrypt Flag
         ret = decrypt_cbc(cipherFlag, (unsigned char *)flag, AES_BLOCK_SIZE, key, iv);
-        if(ret < 0){
+        if(ret < 0)
+        {
             printf("Decrypt Error code : %d \n",ret);
             return -1;
         }
@@ -123,7 +127,8 @@ int UncompressAndDecrypt(FILE *src, FILE *dst, unsigned char *key)
         fread(cipher, 1, blockLength, src); //Read Data
 
         ret = decrypt_cbc(cipher, buffer, bufLength, key, iv);
-        if(ret < 0){
+        if(ret < 0)
+        {
             printf("Decrypt Error code : %d \n",ret);
             return -1;
         }
@@ -136,29 +141,36 @@ int UncompressAndDecrypt(FILE *src, FILE *dst, unsigned char *key)
         }
         if (strm.avail_in == 0)
             break;
+
         strm.next_in = buffer;
 
-        do {
+        while (1)
+        {
             strm.avail_out = CHUNK;
             strm.next_out = out;
             ret = inflate(&strm, Z_NO_FLUSH);
             switch (ret)
             {
                 case Z_NEED_DICT:
-                    ret = Z_DATA_ERROR;     /* and fall through */
+                    ret = Z_DATA_ERROR;
                 case Z_DATA_ERROR:
                 case Z_MEM_ERROR:
                     (void)inflateEnd(&strm);
                     return ret;
             }
             have = CHUNK - strm.avail_out;
-            if (fwrite(out, 1, have, dst) != have || ferror(dst)) {
+            if (fwrite(out, 1, have, dst) != have || ferror(dst))
+            {
                 (void)inflateEnd(&strm);
                 return Z_ERRNO;
             }
-        } while (strm.avail_out == 0);
+            if(strm.avail_out != 0)
+                break;
+        }
 
-    } while (ret != Z_STREAM_END);
+        if(ret == Z_FINISH)
+            break;
+    }
 
     (void)inflateEnd(&strm);
     return ret == Z_STREAM_END ? Z_OK : Z_DATA_ERROR;
