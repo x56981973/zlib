@@ -25,7 +25,7 @@ int CompressAndEncrypt(FILE *src, FILE *dst, unsigned char *key)
     char flag[AES_BLOCK_SIZE] = {0};
     unsigned char buffer[CHUNK + AES_BLOCK_SIZE];
     unsigned char cipher[CHUNK + AES_BLOCK_SIZE];
-    unsigned blockNum, bufLength;
+    unsigned blockNum, bufferLength;
 
     /* allocate deflate state */
     strm.zalloc = Z_NULL;
@@ -59,13 +59,13 @@ int CompressAndEncrypt(FILE *src, FILE *dst, unsigned char *key)
                 //Encrypt start
                 blockNum = getBlockNum(have);
                 sprintf(flag, "%x", have); //get length
-                bufLength = AES_BLOCK_SIZE * blockNum + AES_BLOCK_SIZE; //cipher text + flag
+                bufferLength = AES_BLOCK_SIZE * blockNum + AES_BLOCK_SIZE; //cipher text + flag
                 memcpy(buffer, flag, AES_BLOCK_SIZE);
                 memcpy(buffer + AES_BLOCK_SIZE, out, AES_BLOCK_SIZE * blockNum);
-                encrypt_cbc(buffer, cipher, bufLength, key, iv);
+                encrypt_cbc(buffer, cipher, bufferLength, key, iv);
                 //Encrypt End
 
-                if (fwrite(cipher, 1, bufLength, dst) != bufLength || ferror(dst))
+                if (fwrite(cipher, 1, bufferLength, dst) != bufferLength || ferror(dst))
                 {
                     (void)deflateEnd(&strm);
                     return Z_ERRNO;
@@ -96,7 +96,7 @@ int UncompressAndDecrypt(FILE *src, FILE *dst, unsigned char *key)
     unsigned char cipherFlag[AES_BLOCK_SIZE] = {0};
     unsigned char buffer[CHUNK];
     unsigned char cipher[CHUNK];
-    unsigned blockNum, blockLength, bufLength;
+    unsigned blockNum, blockLength, bufferLength;
 
     strm.zalloc = Z_NULL;
     strm.zfree = Z_NULL;
@@ -120,20 +120,20 @@ int UncompressAndDecrypt(FILE *src, FILE *dst, unsigned char *key)
             printf("Decrypt Error code : %d \n",ret);
             return -1;
         }
-        sscanf(flag, "%x", &bufLength); //get length
+        sscanf(flag, "%x", &bufferLength); //get length
 
-        blockNum = getBlockNum(bufLength);
+        blockNum = getBlockNum(bufferLength);
         blockLength = blockNum * AES_BLOCK_SIZE;
         fread(cipher, 1, blockLength, src); //Read Data
 
-        ret = decrypt_cbc(cipher, buffer, bufLength, key, iv);
+        ret = decrypt_cbc(cipher, buffer, bufferLength, key, iv);
         if(ret < 0)
         {
             printf("Decrypt Error code : %d \n",ret);
             return -1;
         }
 
-        strm.avail_in = bufLength;
+        strm.avail_in = bufferLength;
         if (ferror(src))
         {
             (void)inflateEnd(&strm);
