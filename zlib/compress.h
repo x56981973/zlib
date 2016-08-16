@@ -3,6 +3,6 @@
 
 #define CHUNK 16384
 
-int CompressAndEncrypt(FILE *src, FILE *dst, unsigned char *key);
+int CompressAndEncrypt(int src, int dst, unsigned char *key);
 
-int UncompressAndDecrypt(FILE *src, FILE *dst, unsigned char *key);
+int UncompressAndDecrypt(int src, int dst, unsigned char *key);

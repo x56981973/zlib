@@ -1,5 +1,9 @@
 #include <stdio.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "compress.h"
 
 void printUsage()
@@ -81,42 +85,20 @@ int main(int argc, char **argv)
 
     unsigned char key[] = "thiskeyisverybad";
 
-    FILE *src;
-    src = fopen("a","rb");
-    if(src == NULL){
-        printf("Unable to open file.\n");
-        return -1;
-    }
-    FILE *dst;
-    dst = fopen("a.out","wb");
-    if(dst == NULL){
-        printf("Unable to open file.\n");
-        return -1;
-    }
+    int src = open("a",O_RDONLY);
+    int dst = open("a.out",O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
 
     CompressAndEncrypt(src,dst,key);
 
-    fclose(src);
-    fclose(dst);
+    close(src);
+    close(dst);
 
-    FILE *src1;
-    src1 = fopen("a.out","rb");
-    if(src1 == NULL){
-        printf("Unable to open file.\n");
-        return -1;
-    }
-
-    FILE *dst1;
-    dst1 = fopen("a.out.out","wb");
-    if(dst1 == NULL){
-        printf("Unable to open file.\n");
-        return -1;
-    }
-
+    int src1 = open("a.out",O_RDONLY);
+    int dst1 = open("a.out.out",O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
     UncompressAndDecrypt(src1,dst1,key);
 
-    fclose(src1);
-    fclose(dst1);
+    close(src1);
+    close(dst1);
 
     return 0;
 }

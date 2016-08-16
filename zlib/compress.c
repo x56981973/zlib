@@ -1,19 +1,30 @@
 #include <stdio.h>
 #include <string.h>
 #include <malloc.h>
+#include <unistd.h>
 #include "zlib.h"
 #include "compress.h"
 #include "encrypt.h"
 
-int getBlockNum(int size)
+int getBlockLength(int size)
 {
     if( size % AES_BLOCK_SIZE )
-        return size / AES_BLOCK_SIZE + 1;
+        return (size / AES_BLOCK_SIZE + 1) * AES_BLOCK_SIZE;
     else
-        return size / AES_BLOCK_SIZE;
+        return (size / AES_BLOCK_SIZE) * AES_BLOCK_SIZE;
 }
 
-int CompressAndEncrypt(FILE *src, FILE *dst, unsigned char *key)
+int fillBuffer(unsigned char *buffer, int *index, unsigned char *str, int length)
+{
+    memcpy(buffer + *index, str, length);
+    *index += length; //new index
+    if( *index < CHUNK )
+        return 0; //buffer is not full
+    else
+        return 1; //buffer is full
+}
+
+int CompressAndEncrypt(int src, int dst, unsigned char *key)
 {
     int ret, flush;
     unsigned have;
@@ -22,10 +33,11 @@ int CompressAndEncrypt(FILE *src, FILE *dst, unsigned char *key)
     unsigned char out[CHUNK];
 
     unsigned char iv[] = "0000000000000000";
-    char flag[AES_BLOCK_SIZE] = {0};
-    unsigned char buffer[CHUNK + AES_BLOCK_SIZE];
-    unsigned char cipher[CHUNK + AES_BLOCK_SIZE];
-    unsigned blockNum, bufferLength;
+    unsigned char cipher[CHUNK];
+    unsigned char buffer[2*CHUNK]; // buffer length = 2 * CHUNK
+    unsigned char *block;
+    int blockLength;
+    int index = 0;
 
     /* allocate deflate state */
     strm.zalloc = Z_NULL;
@@ -38,13 +50,12 @@ int CompressAndEncrypt(FILE *src, FILE *dst, unsigned char *key)
     /* compress until end of file */
     while (1)
     {
-        strm.avail_in = fread(in, 1, CHUNK, src);
-        if (ferror(src))
-        {
-            (void)deflateEnd(&strm);
-            return Z_ERRNO;
-        }
-        flush = feof(src) ? Z_FINISH : Z_NO_FLUSH;
+        strm.avail_in = read(src, in, CHUNK);
+        if ( strm.avail_in == 0 )
+            flush = Z_FINISH;
+        else
+            flush = Z_NO_FLUSH;
+
         strm.next_in = in;
 
         while (1)
@@ -56,19 +67,16 @@ int CompressAndEncrypt(FILE *src, FILE *dst, unsigned char *key)
 
             if(have != 0)
             {
-                //Encrypt start
-                blockNum = getBlockNum(have);
-                sprintf(flag, "%x", have); //get length
-                bufferLength = AES_BLOCK_SIZE * blockNum + AES_BLOCK_SIZE; //cipher text + flag
-                memcpy(buffer, flag, AES_BLOCK_SIZE);
-                memcpy(buffer + AES_BLOCK_SIZE, out, AES_BLOCK_SIZE * blockNum);
-                encrypt_cbc(buffer, cipher, bufferLength, key, iv);
-                //Encrypt End
-
-                if (fwrite(cipher, 1, bufferLength, dst) != bufferLength || ferror(dst))
+                if( fillBuffer(buffer, &index, out, have) ) //buffer is full
                 {
-                    (void)deflateEnd(&strm);
-                    return Z_ERRNO;
+                    //Encrypted buffer length = CHUNK
+                    encrypt_cbc(buffer, cipher, CHUNK, key, iv);
+
+                    //Write file
+                    write(dst, cipher, CHUNK);
+
+                    memcpy(buffer, buffer + CHUNK, CHUNK);
+                    index = index - CHUNK;
                 }
             }
 
@@ -77,14 +85,23 @@ int CompressAndEncrypt(FILE *src, FILE *dst, unsigned char *key)
         }
 
         if(flush == Z_FINISH)
+        {
+            blockLength = getBlockLength(index);
+            block = (unsigned char *)malloc(blockLength);
+
+            encrypt_cbc(buffer, block, blockLength, key, iv);
+            write(dst, block, blockLength); //Write Last Block
+
+            free(block);
             break;
+        }
     }
 
     (void)deflateEnd(&strm);
     return Z_OK;
 }
 
-int UncompressAndDecrypt(FILE *src, FILE *dst, unsigned char *key)
+int UncompressAndDecrypt(int src, int dst, unsigned char *key)
 {
     int ret;
     unsigned have;
@@ -92,11 +109,9 @@ int UncompressAndDecrypt(FILE *src, FILE *dst, unsigned char *key)
     unsigned char out[CHUNK];
 
     unsigned char iv[] = "0000000000000000";
-    char flag[AES_BLOCK_SIZE] = {0};
-    unsigned char cipherFlag[AES_BLOCK_SIZE] = {0};
     unsigned char buffer[CHUNK];
     unsigned char cipher[CHUNK];
-    unsigned blockNum, blockLength, bufferLength;
+    int len;
 
     strm.zalloc = Z_NULL;
     strm.zfree = Z_NULL;
@@ -109,36 +124,18 @@ int UncompressAndDecrypt(FILE *src, FILE *dst, unsigned char *key)
 
     while (1)
     {
-        //Read Flag
-        if(fread(cipherFlag, 1, AES_BLOCK_SIZE, src) != AES_BLOCK_SIZE)
+        len = read(src, cipher, CHUNK); //Read Data
+        if (len == 0)
             break;
 
-        //Decrypt Flag
-        ret = decrypt_cbc(cipherFlag, (unsigned char *)flag, AES_BLOCK_SIZE, key, iv);
-        if(ret < 0)
-        {
-            printf("Decrypt Error code : %d \n",ret);
-            return -1;
-        }
-        sscanf(flag, "%x", &bufferLength); //get length
-
-        blockNum = getBlockNum(bufferLength);
-        blockLength = blockNum * AES_BLOCK_SIZE;
-        fread(cipher, 1, blockLength, src); //Read Data
-
-        ret = decrypt_cbc(cipher, buffer, bufferLength, key, iv);
+        ret = decrypt_cbc(cipher, buffer, len, key, iv);
         if(ret < 0)
         {
             printf("Decrypt Error code : %d \n",ret);
             return -1;
         }
 
-        strm.avail_in = bufferLength;
-        if (ferror(src))
-        {
-            (void)inflateEnd(&strm);
-            return Z_ERRNO;
-        }
+        strm.avail_in = len;
         if (strm.avail_in == 0)
             break;
 
@@ -159,7 +156,7 @@ int UncompressAndDecrypt(FILE *src, FILE *dst, unsigned char *key)
                     return ret;
             }
             have = CHUNK - strm.avail_out;
-            if (fwrite(out, 1, have, dst) != have || ferror(dst))
+            if ( write(dst, out, have) != have )
             {
                 (void)inflateEnd(&strm);
                 return Z_ERRNO;
