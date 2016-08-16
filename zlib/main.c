@@ -16,7 +16,6 @@ void printUsage()
 int main(int argc, char **argv)
 {
 
-    /*
     char *in; //source file name
     char *out; //out file name
     unsigned char *key; //AES Key
@@ -53,52 +52,56 @@ int main(int argc, char **argv)
         out = argv[7];
     }
 
-    FILE *input;
-    input = fopen(in,"rb");
+    int src = open(in,O_RDONLY);
+    if(src < 0)
+    {
+        printf("Unable to open file: %s\n",in);
+        return -1;
+    }
 
-    FILE *output;
-    output = fopen(out,"wb");
+    int dst = open(out,O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
+    if(dst < 0)
+    {
+        printf("Unable to open file: %s\n",in);
+        return -1;
+    }
 
     int result;
     if(strcmp(argv[1], "-c") == 0)
     {
-        result = CompressAndEncrypt(input, output, key);
+        result = compressAndEncrypt(src, dst, key);
         if (result < 0)
-        {
             printf("Compress File Error.\n");
-        }
     }
     else
     {
-        result = UncompressAndDecrypt(input, output, key);
+        result = uncompressAndDecrypt(src, dst, key);
         if (result < 0)
-        {
             printf("Uncompress File Error.\n");
-        }
     }
 
-    fclose(input);
-    fclose(output);
+    close(dst);
+    close(src);
 
     return 0;
-    */
 
+/*
     unsigned char key[] = "thiskeyisverybad";
 
     int src = open("a",O_RDONLY);
     int dst = open("a.out",O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
 
-    CompressAndEncrypt(src,dst,key);
+    compressAndEncrypt(src,dst,key);
 
     close(src);
     close(dst);
 
     int src1 = open("a.out",O_RDONLY);
     int dst1 = open("a.out.out",O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
-    UncompressAndDecrypt(src1,dst1,key);
+    uncompressAndDecrypt(src1,dst1,key);
 
     close(src1);
     close(dst1);
-
+*/
     return 0;
 }

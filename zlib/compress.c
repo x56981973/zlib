@@ -24,7 +24,7 @@ int fillBuffer(unsigned char *buffer, int *index, unsigned char *str, int length
         return 1; //buffer is full
 }
 
-int CompressAndEncrypt(int src, int dst, unsigned char *key)
+int compressAndEncrypt(int src, int dst, unsigned char *key)
 {
     int ret, flush;
     unsigned have;
@@ -101,7 +101,7 @@ int CompressAndEncrypt(int src, int dst, unsigned char *key)
     return Z_OK;
 }
 
-int UncompressAndDecrypt(int src, int dst, unsigned char *key)
+int uncompressAndDecrypt(int src, int dst, unsigned char *key)
 {
     int ret;
     unsigned have;
