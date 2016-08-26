@@ -15,7 +15,7 @@ void printUsage()
 
 int main(int argc, char **argv)
 {
-
+/*
     char *in; //source file name
     char *out; //out file name
     unsigned char *key; //AES Key
@@ -84,24 +84,24 @@ int main(int argc, char **argv)
     close(src);
 
     return 0;
+*/
 
-/*
     unsigned char key[] = "thiskeyisverybad";
 
-    int src = open("a",O_RDONLY);
-    int dst = open("a.out",O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
+    int src = open("b",O_RDONLY);
+    int dst = open("b.out",O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
 
     compressAndEncrypt(src,dst,key);
 
     close(src);
     close(dst);
 
-    int src1 = open("a.out",O_RDONLY);
-    int dst1 = open("a.out.out",O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
+    int src1 = open("b.out",O_RDONLY);
+    int dst1 = open("b.out.out",O_WRONLY|O_CREAT,S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
     uncompressAndDecrypt(src1,dst1,key);
 
     close(src1);
     close(dst1);
-*/
+
     return 0;
 }

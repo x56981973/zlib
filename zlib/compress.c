@@ -26,7 +26,7 @@ int fillBuffer(unsigned char *buffer, int *index, unsigned char *str, int length
 
 int compressAndEncrypt(int src, int dst, unsigned char *key)
 {
-    int ret, flush;
+    int ret, flush,padding;
     unsigned have;
     z_stream strm;
     unsigned char in[CHUNK];
@@ -35,7 +35,6 @@ int compressAndEncrypt(int src, int dst, unsigned char *key)
     unsigned char iv[] = "0000000000000000";
     unsigned char cipher[CHUNK];
     unsigned char buffer[2*CHUNK]; // buffer length = 2 * CHUNK
-    unsigned char *block;
     int blockLength;
     int index = 0;
 
@@ -48,51 +47,48 @@ int compressAndEncrypt(int src, int dst, unsigned char *key)
         return ret;
 
     /* compress until end of file */
+    strm.avail_out = CHUNK;
     while (1)
     {
-        strm.avail_in = read(src, in, CHUNK);
-        if ( strm.avail_in == 0 )
-            flush = Z_FINISH;
-        else
-            flush = Z_NO_FLUSH;
-
-        strm.next_in = in;
-
-        while (1)
+        if(strm.avail_out != 0)
         {
-            strm.avail_out = CHUNK;
-            strm.next_out = out;
-            ret = deflate(&strm, flush);
-            have = CHUNK - strm.avail_out;
+            strm.avail_in = read(src, in, CHUNK);
+            flush = (strm.avail_in <= 0)? Z_FINISH : Z_NO_FLUSH;
 
-            if(have != 0)
-            {
-                if( fillBuffer(buffer, &index, out, have) ) //buffer is full
-                {
-                    //Encrypted buffer length = CHUNK
-                    encrypt_cbc(buffer, cipher, CHUNK, key, iv);
-
-                    //Write file
-                    write(dst, cipher, CHUNK);
-
-                    memcpy(buffer, buffer + CHUNK, CHUNK);
-                    index = index - CHUNK;
-                }
-            }
-
-            if(strm.avail_out != 0)
-                break;
+            strm.next_in = in;
         }
 
-        if(flush == Z_FINISH)
+        strm.avail_out = CHUNK;
+        strm.next_out = out;
+        ret = deflate(&strm, flush);
+        have = CHUNK - strm.avail_out;
+
+        if(have != 0)
+        {
+            if( fillBuffer(buffer, &index, out, have) ) //buffer is full
+            {
+                //Encrypted buffer length = CHUNK
+                encrypt_cbc(buffer, cipher, CHUNK, key, iv);
+
+                //Write file
+                write(dst, cipher, CHUNK);
+
+                memcpy(buffer, buffer + CHUNK, CHUNK);
+                index = index - CHUNK;
+            }
+        }
+
+        if(flush == Z_FINISH && strm.avail_out != 0)
         {
             blockLength = getBlockLength(index);
-            block = (unsigned char *)malloc(blockLength);
+            padding = blockLength - index;
+            if(padding > 0)
+            {
+               memset(buffer + index, 0, padding);
+            }
+            encrypt_cbc(buffer, cipher, blockLength, key, iv);
+            write(dst, cipher, blockLength); //Write Last Block
 
-            encrypt_cbc(buffer, block, blockLength, key, iv);
-            write(dst, block, blockLength); //Write Last Block
-
-            free(block);
             break;
         }
     }
@@ -122,47 +118,37 @@ int uncompressAndDecrypt(int src, int dst, unsigned char *key)
     if (ret != Z_OK)
         return ret;
 
+    strm.avail_out = CHUNK;
     while (1)
     {
-        len = read(src, cipher, CHUNK); //Read Data
-        if (len == 0)
-            break;
-
-        ret = decrypt_cbc(cipher, buffer, len, key, iv);
-        if(ret < 0)
+        if(strm.avail_out != 0)
         {
-            printf("Decrypt Error code : %d \n",ret);
-            return -1;
+            len = read(src, cipher, CHUNK); //Read Data
+            if (len == 0) break;
+
+            decrypt_cbc(cipher, buffer, len, key, iv);
+
+            strm.avail_in = len;
+            strm.next_in = buffer;
         }
 
-        strm.avail_in = len;
-        if (strm.avail_in == 0)
-            break;
-
-        strm.next_in = buffer;
-
-        while (1)
+        strm.avail_out = CHUNK;
+        strm.next_out = out;
+        ret = inflate(&strm, Z_NO_FLUSH);
+        switch (ret)
         {
-            strm.avail_out = CHUNK;
-            strm.next_out = out;
-            ret = inflate(&strm, Z_NO_FLUSH);
-            switch (ret)
-            {
-                case Z_NEED_DICT:
-                    ret = Z_DATA_ERROR;
-                case Z_DATA_ERROR:
-                case Z_MEM_ERROR:
-                    (void)inflateEnd(&strm);
-                    return ret;
-            }
-            have = CHUNK - strm.avail_out;
-            if ( write(dst, out, have) != have )
-            {
+            case Z_NEED_DICT:
+                ret = Z_DATA_ERROR;
+            case Z_DATA_ERROR:
+            case Z_MEM_ERROR:
                 (void)inflateEnd(&strm);
-                return Z_ERRNO;
-            }
-            if(strm.avail_out != 0)
-                break;
+                return ret;
+        }
+        have = CHUNK - strm.avail_out;
+        if ( write(dst, out, have) != have )
+        {
+            (void)inflateEnd(&strm);
+            return Z_ERRNO;
         }
 
         if(ret == Z_FINISH)
